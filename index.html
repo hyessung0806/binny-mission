@@ -1,0 +1,880 @@
+<!-- 비니의 미션달력 — 매일 미션 완수 → 부모가 도장, 다 모으면 선물. 갤탭/안드로이드/아이폰 가족코드 실시간 연동 PWA (단일 파일) -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>비니의 미션달력</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#f6a623">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="비니의 미션달력">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root{
+    --bg:#fdf6ec; --ink:#2b2b3a; --line-thin:#e3ddd0; --line:#6b6151;
+    --accent:#f6a623; --accent-2:#5b8def; --good:#1f8a6d; --muted:#9a917c; --stamp:#d6453a;
+    --pad-bg:#fffdf8; --panel:min(94vw,460px);
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; }
+  body{
+    background:radial-gradient(1200px 600px at 50% -200px,#fff8e8,var(--bg));
+    color:var(--ink);
+    font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic","맑은 고딕",system-ui,sans-serif;
+    min-height:100vh; padding:12px; user-select:none; -webkit-user-select:none;
+  }
+  .wrap{ display:flex; flex-direction:column; align-items:center; gap:8px; max-width:var(--panel); margin:0 auto; }
+
+  /* 헤더 */
+  header{ width:100%; }
+  .topbar{ display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:8px; }
+  h1{ font-size:23px; margin:2px 0; letter-spacing:-0.5px; text-align:center; white-space:nowrap; }
+  h1 .star{ color:var(--accent); }
+  .synchip{ justify-self:end; font-size:11px; font-weight:800; border-radius:999px; padding:3px 9px;
+    border:1.5px solid var(--line-thin); background:#fff; color:var(--muted); cursor:pointer; white-space:nowrap; }
+  .pbadge{ display:none; align-items:center; gap:6px; margin:5px auto 0; width:max-content; cursor:pointer;
+    background:#eaf1ff; color:#2f57a8; border:1.5px solid #c7d8ff; border-radius:999px; padding:4px 13px; font-size:12px; font-weight:800; }
+  .pbadge.show{ display:flex; }
+
+  /* 상단 진행 스트립 */
+  .strip{ width:100%; background:#fff; border:2px solid var(--line-thin); border-radius:16px; padding:11px 14px; text-align:center; }
+  .strip .who{ font-size:14px; font-weight:900; }
+  .strip .who .nm{ color:var(--accent); }
+  .ptext{ font-size:13px; color:#6f6757; font-weight:800; margin:7px 0 5px; line-height:1.45; }
+  .ptext .big{ font-size:16px; color:var(--ink); }
+  .pbar{ height:14px; background:#efe7d6; border-radius:999px; overflow:hidden; }
+  .pfill{ height:100%; background:linear-gradient(90deg,#ffcf6b,var(--accent)); border-radius:999px; transition:width .35s; width:0%; }
+  .reward{ margin-top:6px; font-size:12.5px; font-weight:800; color:#9a6b16; }
+
+  /* 오늘의 미션 */
+  .today{ width:100%; background:#fffdf8; border:2px solid var(--line-thin); border-radius:16px; padding:10px 14px; text-align:center; }
+  .today .h{ font-size:12px; font-weight:900; color:var(--muted); }
+  .today .basic{ font-size:14.5px; font-weight:800; margin-top:3px; }
+  .misschips{ display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-top:7px; }
+  .chip2{ background:#fff7e6; border:1.5px solid #f3d9a3; color:#9a6b16; border-radius:999px; padding:4px 10px; font-size:12px; font-weight:800; }
+
+  /* 달력 */
+  .calnav{ display:flex; align-items:center; justify-content:center; gap:14px; width:100%; margin-top:2px; }
+  .calnav button{ border:2px solid var(--line-thin); background:#fff; border-radius:10px; width:38px; height:38px; font-size:18px; font-weight:900; cursor:pointer; color:var(--ink); }
+  .calnav .title{ font-size:17px; font-weight:900; min-width:140px; text-align:center; cursor:pointer; }
+  #calGrid{ display:grid; grid-template-columns:repeat(7,1fr); gap:5px; width:100%; }
+  .cal-h{ text-align:center; font-size:12px; font-weight:900; color:var(--muted); padding:3px 0; }
+  .cal-h.sun{ color:var(--stamp); } .cal-h.sat{ color:var(--accent-2); }
+  .cal-cell{ position:relative; aspect-ratio:1/1; background:#fff; border:2px solid var(--line-thin); border-radius:12px; cursor:pointer; transition:transform .05s; }
+  .cal-cell:active{ transform:scale(.95); }
+  .cal-cell.empty{ background:transparent; border:none; cursor:default; }
+  .cal-cell.today{ border-color:var(--accent); }
+  .cal-num{ position:absolute; top:3px; left:5px; font-size:11px; font-weight:800; color:#b3ab98; }
+  .cal-cell.today .cal-num{ color:var(--accent); }
+  .stamp{ position:absolute; inset:18% 14% 12% 14%; display:flex; align-items:center; justify-content:center;
+    color:var(--stamp); border:2.5px solid var(--stamp); border-radius:50%; font-size:min(6vw,22px); font-weight:900;
+    transform:rotate(-13deg); opacity:.94; box-shadow:inset 0 0 0 2px #fff, inset 0 0 0 3.5px #f3b6b0; }
+  .stamp.hasx{ border-color:#c77b1a; color:#c77b1a; box-shadow:inset 0 0 0 2px #fff, inset 0 0 0 3.5px #ecc894; }
+  .cal-cnt{ position:absolute; bottom:3px; right:4px; min-width:16px; height:16px; padding:0 3px; border-radius:999px;
+    background:var(--accent); color:#fff; font-size:10.5px; font-weight:900; display:flex; align-items:center; justify-content:center; }
+  .foot{ width:100%; text-align:center; font-size:12px; color:var(--muted); font-weight:800; margin-top:2px; }
+
+  /* 모달 공통 */
+  .modal{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(40,35,20,.45); backdrop-filter:blur(2px); padding:16px; z-index:50; }
+  .modal.show{ display:flex; }
+  .card{ background:#fff; border-radius:22px; padding:22px; text-align:center; width:100%; max-width:360px; box-shadow:0 20px 60px rgba(0,0,0,.25); animation:pop .3s ease; }
+  @keyframes pop{ from{transform:scale(.85);opacity:0;} to{transform:scale(1);opacity:1;} }
+  .card h2{ margin:6px 0; font-size:20px; }
+  .card .note{ margin:8px 0; color:#6f6757; font-size:13.5px; font-weight:800; line-height:1.5; }
+  .btns{ display:flex; flex-direction:column; gap:8px; margin-top:14px; }
+  .btn{ border:none; border-radius:12px; padding:12px 16px; font-size:15px; font-weight:800; cursor:pointer; transition:transform .05s; }
+  .btn:active{ transform:scale(.97); }
+  .btn.primary{ background:var(--accent-2); color:#fff; }
+  .btn.go{ background:var(--accent); color:#fff; }
+  .btn.ghost{ background:#f1ece0; color:#7a715b; }
+  .btn.warn{ background:#ffe1de; color:#c0392b; }
+  .btn:disabled{ opacity:.5; cursor:not-allowed; }
+  .finput{ width:100%; box-sizing:border-box; border:2px solid var(--line-thin); border-radius:11px; padding:11px; font-size:16px; font-weight:700; color:var(--ink); background:#fffdf8; text-align:center; }
+  .finput:focus{ outline:none; border-color:var(--accent); }
+  .err{ color:#c0392b; font-size:12.5px; font-weight:800; min-height:16px; margin:4px 0; }
+  .codebig{ font-size:30px; font-weight:900; letter-spacing:4px; color:var(--accent); background:#fff7e6; border:2px dashed #f3d9a3; border-radius:14px; padding:12px; margin:8px 0; }
+
+  /* 날짜 상세 시트 */
+  .sheetcard{ max-width:380px; text-align:left; max-height:88vh; overflow:auto; }
+  .sheetcard .stitle{ font-size:18px; font-weight:900; text-align:center; }
+  .stamprow{ display:flex; align-items:center; gap:9px; padding:8px 10px; border:2px solid var(--line-thin); border-radius:12px; margin:6px 0; }
+  .stamprow .ico{ font-size:20px; }
+  .stamprow .meta{ flex:1; min-width:0; }
+  .stamprow .meta .t{ font-weight:800; font-size:14px; }
+  .stamprow .meta .s{ font-size:11.5px; color:var(--muted); margin-top:1px; }
+  .stamprow .del{ border:2px solid var(--line-thin); background:#fff; border-radius:9px; padding:6px 9px; font-size:12px; font-weight:800; color:#c0392b; cursor:pointer; }
+  .emptyhint{ text-align:center; color:var(--muted); font-weight:800; font-size:13px; padding:10px 0; }
+  .awardlbl{ font-size:12px; font-weight:900; color:var(--muted); margin:12px 0 4px; }
+  .bigaward{ background:var(--accent); color:#fff; border:none; border-radius:14px; padding:14px; font-size:16px; font-weight:900; cursor:pointer; width:100%; }
+  .bigaward:active{ transform:scale(.98); }
+  .extragrid{ display:flex; flex-direction:column; gap:7px; margin-top:7px; }
+  .extrabtn{ background:#fff7e6; border:2px solid #f3d9a3; color:#9a6b16; border-radius:12px; padding:10px 12px; font-size:14px; font-weight:800; cursor:pointer; text-align:left; }
+  .extrabtn:active{ transform:scale(.98); }
+  .extrabtn.locked{ background:#f3eee2; border-color:#e3ddd0; color:#b3ab98; cursor:not-allowed; }
+  .extrabtn.locked:active{ transform:none; }
+  .kidnote{ text-align:center; font-weight:800; color:var(--good); font-size:13.5px; margin-top:12px; }
+
+  /* 부모 설정 폼 */
+  .pcard{ max-width:380px; text-align:left; max-height:88vh; overflow:auto; }
+  .pchead{ font-size:18px; font-weight:900; text-align:center; margin-bottom:6px; }
+  .frow{ margin:10px 0; }
+  .flabel{ font-size:12px; font-weight:900; color:var(--muted); margin-bottom:4px; }
+  .finput.left{ text-align:left; font-size:15px; padding:9px 11px; }
+  .seg{ display:flex; gap:6px; }
+  .seg .pill{ flex:1; text-align:center; border:2px solid var(--line-thin); background:#fff; color:var(--ink); border-radius:999px; padding:8px 0; font-size:13.5px; font-weight:800; cursor:pointer; }
+  .seg .pill.on{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  .stepper{ display:flex; align-items:center; gap:14px; justify-content:center; }
+  .stepper button{ width:38px; height:38px; border-radius:10px; border:2px solid var(--line-thin); background:#fff; font-size:20px; font-weight:900; cursor:pointer; color:var(--ink); }
+  .stepper b{ font-size:20px; min-width:42px; text-align:center; }
+  .mrow{ display:flex; gap:6px; align-items:center; margin:5px 0; }
+  .mrow .finput{ flex:1; }
+  .iconbtn{ border:2px solid var(--line-thin); background:#fff; border-radius:10px; padding:9px 11px; font-weight:900; cursor:pointer; color:#c0392b; }
+  .addbtn{ width:100%; border:2px dashed var(--line-thin); background:#fffdf8; border-radius:11px; padding:9px; font-weight:800; color:#7a715b; cursor:pointer; margin-top:4px; }
+  .codebox{ display:flex; gap:8px; align-items:center; justify-content:space-between; background:#f6f1e6; border-radius:11px; padding:9px 12px; }
+  .codebox .cv{ font-weight:900; letter-spacing:2px; font-size:16px; }
+  .divider{ height:1px; background:var(--line-thin); margin:13px 0; }
+  .linkbtn{ background:none; border:none; color:var(--accent-2); font-weight:800; font-size:13px; cursor:pointer; text-decoration:underline; padding:4px; }
+
+  /* 축하 별비 */
+  .star-rain{ position:fixed; top:-30px; font-size:26px; z-index:49; pointer-events:none; animation:fall linear forwards; }
+  @keyframes fall{ to{ transform:translateY(110vh) rotate(360deg); opacity:0; } }
+  #win .score{ font-size:30px; font-weight:900; color:var(--accent); margin:6px 0; }
+
+  /* 토스트 */
+  #toast{ position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(18px); background:#2b2b3a; color:#fff; padding:10px 16px; border-radius:12px; font-weight:800; font-size:13.5px; opacity:0; transition:.25s; z-index:80; pointer-events:none; max-width:90vw; text-align:center; }
+  #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* 가로(태블릿) — 달력을 크게 */
+  @media (min-width:820px) and (orientation:landscape){
+    :root{ --panel:min(86vw,720px); }
+    body{ display:flex; flex-direction:column; justify-content:safe center; }
+    .wrap{ gap:10px; }
+    h1{ font-size:27px; }
+    .cal-num{ font-size:12px; } .stamp{ font-size:24px; }
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="topbar">
+      <div></div>
+      <h1 id="title">비니의 <span class="star">⭐</span> 미션달력</h1>
+      <button class="synchip" id="synchip" title="동기화 상태">…</button>
+    </div>
+    <div id="parentBadge" class="pbadge"></div>
+  </header>
+
+  <div class="strip">
+    <div class="who" id="who">—</div>
+    <div class="ptext" id="ptext">—</div>
+    <div class="pbar"><div class="pfill" id="pfill"></div></div>
+    <div class="reward" id="reward"></div>
+  </div>
+
+  <div class="today">
+    <div class="h">오늘의 미션 ✍️</div>
+    <div class="basic" id="todayBasic">—</div>
+    <div class="misschips" id="todayExtras"></div>
+  </div>
+
+  <div class="calnav">
+    <button id="calPrev" aria-label="이전 달">‹</button>
+    <div class="title" id="calTitle" title="오늘로">—</div>
+    <button id="calNext" aria-label="다음 달">›</button>
+  </div>
+  <div id="calGrid"></div>
+  <div class="foot" id="foot">날짜를 누르면 그날 도장을 볼 수 있어요 ⭐</div>
+</div>
+
+<!-- 첫 실행 셋업 -->
+<div id="setup" class="modal"><div class="card">
+  <div style="font-size:40px">📅</div>
+  <h2>비니의 미션달력</h2>
+  <div id="setupBody"></div>
+</div></div>
+
+<!-- 날짜 상세 시트 -->
+<div id="daysheet" class="modal"><div class="card sheetcard">
+  <div class="stitle" id="sheetTitle">—</div>
+  <div id="sheetBody"></div>
+  <div class="btns"><button class="btn ghost" id="sheetClose">닫기</button></div>
+</div></div>
+
+<!-- 부모 모드 -->
+<div id="parent" class="modal"><div class="card pcard">
+  <div class="pchead">🔐 <span id="parentTitle">부모 모드</span></div>
+  <div id="parentBody"></div>
+</div></div>
+
+<!-- 축하 -->
+<div id="win" class="modal"><div class="card">
+  <div style="font-size:42px">🎉</div>
+  <div class="score" id="winScore">🎁</div>
+  <h2 id="winTitle">선물 도장 다 모았어요!</h2>
+  <div class="note" id="winNote"></div>
+  <div class="btns"><button class="btn go" id="winClose">와! 신난다 🎊</button></div>
+</div></div>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+
+/* ════════════════════════════════════════════════════════════════
+   ① 설정 — 여기 두 줄에 Supabase 값을 넣으면 "여러 기기 실시간 연동"이 켜집니다.
+      (값을 안 넣으면 자동으로 "이 기기 단독 모드"로 동작 → 바로 써볼 수 있음)
+      값 얻는 법: docs/가입_배포_가이드.md  (anon 키는 공개돼도 안전합니다)
+   ════════════════════════════════════════════════════════════════ */
+const SUPABASE_URL      = "https://kalohmhfnhhwsltlshpt.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImthbG9obWhmbmhod3NsdGxzaHB0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyNzI5MTIsImV4cCI6MjA5Nzg0ODkxMn0.8eVOJI-zODqPwZnhC-vaiyHHd98hT8GZXR8Cd6uYBeg";
+const SUPA_LIB = "https://esm.sh/@supabase/supabase-js@2.45.4";   // 버전 고정
+const SUPA_CONFIGURED =
+  /^https:\/\/[a-z0-9-]+\.supabase\.co/i.test(SUPABASE_URL) &&
+  SUPABASE_ANON_KEY.length > 40 && !/YOUR-/.test(SUPABASE_ANON_KEY);
+
+/* 처음 만들 때 들어가는 예시 미션/목표/보상 — 전부 부모 모드에서 수정 가능 */
+function defaultConfig(){
+  return {
+    target: 28,                           // 목표 도장 수(선물까지) — 부모 모드에서 수정
+    targetScope: "cycle",                 // 'cycle'=반복(28개마다 선물, 기본) / 'total'=누적 1회 / 'month'=매달
+    reward: "비니가 고르는 선물 🎁",        // 선물(아이가 그때그때 선택) — 부모 모드에서 수정
+    basicMission: "오늘의 숙제 전체 완료",  // 요일별 숙제가 없을 때 표시
+    extraMissions: [                      // ★ 추가쿠폰 (각 +1 도장)
+      { id: uid(), label: "책 2권 더 읽기" },
+      { id: uid(), label: "수 모으기·가르기 문제 풀기" },
+    ],
+    weekdayMissions: {                    // ★ 요일별 숙제 — 그날 전체 수행 시 도장 1개 (0=일 … 6=토)
+      1: "독서통장(1권), 문해력, 별사냥스도쿠",
+      2: "한글쑥쑥, 독서통장, 수학, 글방사랑",
+      3: "한글쑥쑥, 독서통장, 문해력, 수학, 별사냥스도쿠",
+      4: "한글쑥쑥, 독서통장, 수학",
+      5: "독서통장, 문해력, 수학, 별사냥스도쿠",
+    },
+    parentPw: "",                         // btoa, 모든 기기 공유(부모만 도장)
+    celebrated: [],                       // 축하 1회 처리 키
+  };
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ② 저장소 래퍼 (try/catch + 메모리 폴백) — 직접 localStorage 호출 금지
+   ════════════════════════════════════════════════════════════════ */
+const Store = (() => {
+  let mem = {}, ok = false;
+  try { localStorage.setItem("__t","1"); localStorage.removeItem("__t"); ok = true; } catch(e){ ok = false; }
+  return {
+    get(k){ try { return ok ? localStorage.getItem(k) : (k in mem ? mem[k] : null); } catch(e){ return (k in mem) ? mem[k] : null; } },
+    set(k,v){ try { ok ? localStorage.setItem(k,v) : (mem[k]=v); } catch(e){ mem[k]=v; } },
+  };
+})();
+const KEY_CODE  = "binnymission_code_v1";
+const KEY_CACHE = "binnymission_cache_v1";
+const KEY_WHO   = "binnymission_who_v1";
+
+/* ── 작은 유틸 ── */
+const $ = s => document.querySelector(s);
+function pad2(n){ return String(n).padStart(2,"0"); }
+function ymd(y,m,d){ return y + "-" + pad2(m+1) + "-" + pad2(d); }     // m: 0-based
+function dstr(dt){ return dt.getFullYear() + "-" + pad2(dt.getMonth()+1) + "-" + pad2(dt.getDate()); }
+function today(){ return dstr(new Date()); }
+function ymKey(y,m){ return y + "-" + pad2(m+1); }
+function monthRange(y,m){ return { from: ymd(y,m,1), to: ymd(y,m, new Date(y,m+1,0).getDate()) }; }
+const WK = ["일","월","화","수","목","금","토"];
+function dayTitle(ds){ const [y,m,d]=ds.split("-").map(Number); const dt=new Date(y,m-1,d); return `${m}월 ${d}일 (${WK[dt.getDay()]})`; }
+function dowOf(ds){ const [y,m,d]=ds.split("-").map(Number); return new Date(y,m-1,d).getDay(); }
+function lc(s){ return String(s||"").trim().toLowerCase(); }
+function uid(){ try { return crypto.randomUUID(); } catch(e){ return "id-"+Math.random().toString(36).slice(2)+Date.now().toString(36); } }
+function genCode(n){ const a="abcdefghjkmnpqrstuvwxyz23456789"; let s=""; for(let i=0;i<n;i++) s+=a[Math.floor(Math.random()*a.length)]; return s; }
+const encPw = p => btoa(unescape(encodeURIComponent(p)));
+
+/* ════════════════════════════════════════════════════════════════
+   ③ 백엔드 추상화 — Supabase(연동) 또는 Local(이 기기). UI는 둘을 구분 안 함.
+   ════════════════════════════════════════════════════════════════ */
+function makeBackend(){ return SUPA_CONFIGURED ? supaBackend() : localBackend(); }
+
+function localBackend(){
+  const LKEY = "binnymission_local_v1";
+  const db = () => { try { return JSON.parse(Store.get(LKEY)) || { boards:{} }; } catch(e){ return { boards:{} }; } };
+  const save = d => Store.set(LKEY, JSON.stringify(d));
+  return {
+    mode:"local",
+    async createBoard(name, config){
+      const d = db(); let code; do { code = genCode(10); } while(d.boards[code]);
+      d.boards[code] = { id: uid(), child_name: (name||"비니").trim() || "비니", config: config || {}, stamps: [] };
+      save(d); return { code };
+    },
+    async getBoard(code){
+      const b = db().boards[lc(code)]; if(!b) return null;
+      return { id:b.id, childName:b.child_name, config:b.config||{}, totalStamps:(b.stamps||[]).length };
+    },
+    async listStamps(code, from, to){
+      const b = db().boards[lc(code)]; if(!b) return [];
+      return (b.stamps||[]).filter(s => s.day>=from && s.day<=to)
+        .map(s => ({ id:s.id, day:s.day, kind:s.kind, label:s.label, awardedBy:s.awarded_by }))
+        .sort((a,b) => a.day<b.day?-1 : a.day>b.day?1 : 0);
+    },
+    async addStamp(code, day, kind, label, by){
+      const d = db(), b = d.boards[lc(code)]; if(!b) throw new Error("잘못된 가족 코드입니다");
+      const s = { id: uid(), day, kind: kind||"basic", label:(label||"").trim()||null, awarded_by:(by||"").trim()||null };
+      b.stamps.push(s); save(d); return { id:s.id };
+    },
+    async removeStamp(code, id){
+      const d = db(), b = d.boards[lc(code)]; if(!b) throw new Error("잘못된 가족 코드입니다");
+      b.stamps = (b.stamps||[]).filter(s => s.id !== id); save(d);
+    },
+    async clearStamps(code, from, to){
+      const d = db(), b = d.boards[lc(code)]; if(!b) throw new Error("잘못된 가족 코드입니다");
+      const before = b.stamps.length; b.stamps = b.stamps.filter(s => !(s.day>=from && s.day<=to)); save(d);
+      return before - b.stamps.length;
+    },
+    async saveConfig(code, name, config){
+      const d = db(), b = d.boards[lc(code)]; if(!b) throw new Error("잘못된 가족 코드입니다");
+      if((name||"").trim()) b.child_name = name.trim();
+      if(config) b.config = config; save(d);
+    },
+  };
+}
+
+function supaBackend(){
+  let client = null;
+  async function sb(){
+    if(client) return client;
+    const mod = await import(SUPA_LIB);        // 동적 import (오프라인이면 throw → 캐시 폴백)
+    client = mod.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth:{ persistSession:false } });
+    return client;
+  }
+  async function rpc(fn, args){
+    const c = await sb();
+    const { data, error } = await c.rpc(fn, args);
+    if(error) throw new Error(error.message || "서버 오류");
+    return data;
+  }
+  return {
+    mode:"supabase",
+    async createBoard(name, config){
+      const code = await rpc("create_board", { p_child_name: name||"비니", p_config: config||{} });
+      return { code };
+    },
+    async getBoard(code){
+      const rows = await rpc("get_board", { p_code: code });
+      const r = Array.isArray(rows) ? rows[0] : rows;
+      if(!r) return null;
+      return { id:r.id, childName:r.child_name, config:r.config||{}, totalStamps:Number(r.total_stamps||0) };
+    },
+    async listStamps(code, from, to){
+      const rows = await rpc("list_stamps", { p_code: code, p_from: from, p_to: to });
+      return (rows||[]).map(s => ({ id:s.id, day:s.day, kind:s.kind, label:s.label, awardedBy:s.awarded_by }));
+    },
+    async addStamp(code, day, kind, label, by){
+      const id = await rpc("add_stamp", { p_code:code, p_day:day, p_kind:kind||"basic", p_label:label||null, p_by:by||null });
+      return { id };
+    },
+    async removeStamp(code, id){ await rpc("remove_stamp", { p_code:code, p_id:id }); },
+    async clearStamps(code, from, to){ return await rpc("clear_stamps", { p_code:code, p_from:from, p_to:to }); },
+    async saveConfig(code, name, config){ await rpc("save_config", { p_code:code, p_child_name:name||null, p_config:config||{} }); },
+  };
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ④ 상태
+   ════════════════════════════════════════════════════════════════ */
+const backend = makeBackend();
+const _now = new Date();
+const state = {
+  code: Store.get(KEY_CODE) || "",
+  who: Store.get(KEY_WHO) || "",
+  board: null,                 // { id, childName, config, totalStamps }
+  stamps: [],                  // 보이는 달의 도장들
+  view: { y: _now.getFullYear(), m: _now.getMonth() },
+  parentOn: false,
+  sync: SUPA_CONFIGURED ? "connecting" : "local",
+  sheetDay: null,
+};
+function cfg(){ return Object.assign(defaultConfig(), state.board ? state.board.config : {}); }
+function backendMode(){ return backend.mode === "local" ? "local" : "connected"; }
+
+/* ── 토스트 / 동기화 칩 ── */
+let _toastT = null;
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(_toastT); _toastT=setTimeout(()=>t.classList.remove("show"), 2600); }
+function setSync(s){ state.sync=s; const c=$("#synchip");
+  const map={ connecting:["🟡 연결 중","연결 중"], syncing:["🟡 동기화…","동기화 중"], connected:["🟢 연동","실시간 연동됨"],
+    offline:["⚪ 오프라인","인터넷 연결을 확인하세요"], local:["🟣 이 기기","이 기기에만 저장 (연동하려면 Supabase 설정)"] };
+  const v=map[s]||["…",""]; c.textContent=v[0]; c.title=v[1];
+}
+function syncErr(e){ return navigator.onLine ? ("앗, 잠시 후 다시 해볼까요? "+(e&&e.message?("("+e.message+")"):"")) : "지금은 오프라인이에요. 연결되면 다시 눌러주세요."; }
+
+/* ── 캐시(오프라인 보기) ── */
+function cacheSave(){ try { Store.set(KEY_CACHE, JSON.stringify({ board:state.board, stamps:state.stamps, view:state.view })); } catch(e){} }
+function cacheLoad(){ try { return JSON.parse(Store.get(KEY_CACHE)); } catch(e){ return null; } }
+
+/* ════════════════════════════════════════════════════════════════
+   ⑤ 데이터 로드 / 동기화
+   ════════════════════════════════════════════════════════════════ */
+async function loadMonth(){
+  const r = monthRange(state.view.y, state.view.m);
+  state.stamps = await backend.listStamps(state.code, r.from, r.to);
+}
+async function loadBoard(){
+  try{
+    setSync("syncing");
+    const b = await backend.getBoard(state.code);
+    if(!b){ toast("코드를 찾을 수 없어요. 다시 설정할게요."); state.code=""; Store.set(KEY_CODE,""); openSetup(); renderAll(); return; }
+    state.board = b; await loadMonth(); cacheSave(); setSync(backendMode()); renderAll();
+  }catch(e){
+    const c = cacheLoad();
+    if(c && c.board){ state.board=c.board; state.stamps=c.stamps||[]; if(c.view) state.view=c.view; setSync("offline"); renderAll(); }
+    else { setSync("offline"); renderAll(); toast("연결이 안 돼요. 잠시 후 다시 시도해요."); }
+  }
+}
+let _refetching = false;
+async function refetchSoft(){
+  if(!state.code || _refetching) return;
+  _refetching = true;
+  try{
+    const b = await backend.getBoard(state.code);
+    if(b){ state.board=b; await loadMonth(); cacheSave(); setSync(backendMode()); renderAll(); if($("#daysheet").classList.contains("show")) renderSheet(); }
+  }catch(e){ if(!navigator.onLine) setSync("offline"); }
+  finally{ _refetching = false; }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ⑥ 렌더
+   ════════════════════════════════════════════════════════════════ */
+function stampsOn(ds){ return state.stamps.filter(s => s.day === ds); }
+function monthCount(){ const mk = ymKey(state.view.y, state.view.m); return state.stamps.filter(s => s.day.slice(0,7) === mk).length; }
+// 진행률 정보: scope = cycle(반복)/total(누적1회)/month(매달)
+function progressInfo(){
+  const c = cfg(), scope = c.targetScope || "cycle", target = Math.max(1, c.target||1);
+  if(scope === "month"){ return { now: monthCount(), target, rounds: 0, scope }; }
+  const total = state.board ? state.board.totalStamps : 0;
+  if(scope === "cycle"){
+    const rounds = Math.floor(total / target), inRound = total - rounds * target;
+    const now = (total > 0 && inRound === 0) ? target : inRound;   // 막 채운 순간엔 28/28로 보여줌
+    return { now, target, rounds, scope, total };
+  }
+  return { now: total, target, rounds: 0, scope, total };          // 'total' 누적 1회
+}
+
+function renderAll(){ renderStrip(); renderToday(); renderCalendar(); renderParentBadge(); }
+function renderParentBadge(){
+  const el=$("#parentBadge");
+  if(state.parentOn){ el.classList.add("show"); el.textContent="🔓 부모 모드 · ⚙️ 설정 / 끄기"; el.onclick=()=>{ parentQuickMenu(); show("parent"); }; }
+  else el.classList.remove("show");
+}
+
+function renderStrip(){
+  const c = cfg(), name = state.board ? state.board.childName : "비니";
+  $("#who").innerHTML = `👧 <span class="nm">${esc(name)}</span> 의 도장판`;
+  const pi = progressInfo(), left = Math.max(0, pi.target - pi.now);
+  const scopeTxt = (pi.scope==="month") ? `${state.view.m+1}월 ` : "";
+  $("#ptext").innerHTML = `${scopeTxt}<span class="big">${pi.now}</span> / ${pi.target} 도장`;
+  $("#pfill").style.width = Math.min(100, pi.now/pi.target*100) + "%";
+  const base = left>0 ? `${left}개 더 모으면 → ${c.reward||"선물 🎁"}` : `🎉 다 모았어요! → ${c.reward||"선물 🎁"}`;
+  $("#reward").textContent = base + ((pi.scope==="cycle" && pi.rounds>0) ? `   ·   지금까지 ${pi.rounds}번 받음 🎁` : "");
+}
+function renderToday(){
+  const c = cfg(), t = today(), dow = new Date().getDay();
+  const wk = c.weekdayMissions && c.weekdayMissions[dow];
+  const basic = wk ? ("오늘 숙제: " + wk) : (c.basicMission||"오늘의 기본 미션");
+  const n = stampsOn(t).length;
+  $("#todayBasic").textContent = (n>0 ? "✅ " : "⭐ ") + basic + (n>0 ? `  (도장 ${n}개)` : (wk ? "  · 다 하면 도장 1개" : ""));
+  const box = $("#todayExtras"); box.innerHTML="";
+  (c.extraMissions||[]).forEach(m => { if(!m.label) return; const e=document.createElement("span"); e.className="chip2"; e.textContent="＋ "+m.label; box.appendChild(e); });
+}
+function renderCalendar(){
+  $("#calTitle").textContent = `${state.view.y}년 ${state.view.m+1}월`;
+  const grid = $("#calGrid"); grid.innerHTML="";
+  WK.forEach((w,i)=>{ const h=document.createElement("div"); h.className="cal-h"+(i===0?" sun":i===6?" sat":""); h.textContent=w; grid.appendChild(h); });
+  const y=state.view.y, m=state.view.m;
+  const first=new Date(y,m,1).getDay(), n=new Date(y,m+1,0).getDate(), t=today();
+  for(let i=0;i<first;i++){ const e=document.createElement("div"); e.className="cal-cell empty"; grid.appendChild(e); }
+  for(let d=1; d<=n; d++){
+    const ds = ymd(y,m,d), list = stampsOn(ds), cnt = list.length;
+    const cell = document.createElement("div"); cell.className = "cal-cell"+(ds===t?" today":"");
+    const num = document.createElement("div"); num.className="cal-num"; num.textContent=d; cell.appendChild(num);
+    if(cnt>0){
+      const hasExtra = list.some(s => s.kind==="extra");
+      const st = document.createElement("div"); st.className="stamp"+(hasExtra?" hasx":""); st.textContent="★"; cell.appendChild(st);
+      if(cnt>1){ const b=document.createElement("div"); b.className="cal-cnt"; b.textContent=cnt; cell.appendChild(b); }
+    }
+    cell.onclick = () => openSheet(ds);
+    grid.appendChild(cell);
+  }
+}
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
+
+/* ════════════════════════════════════════════════════════════════
+   ⑦ 날짜 상세 시트 — 도장 보기 / 찍기·빼기 (부모만)
+   ════════════════════════════════════════════════════════════════ */
+function show(id){ $("#"+id).classList.add("show"); }
+function hide(id){ $("#"+id).classList.remove("show"); }
+function openSheet(ds){ state.sheetDay=ds; renderSheet(); show("daysheet"); }
+function renderSheet(){
+  const ds = state.sheetDay, list = stampsOn(ds), c = cfg();
+  $("#sheetTitle").textContent = dayTitle(ds);
+  const b = $("#sheetBody"); b.innerHTML="";
+
+  if(list.length===0){ const e=document.createElement("div"); e.className="emptyhint"; e.textContent="아직 도장이 없어요"; b.appendChild(e); }
+  else list.forEach(s=>{
+    const row=document.createElement("div"); row.className="stamprow";
+    const ico=document.createElement("div"); ico.className="ico"; ico.textContent = s.kind==="extra" ? "✦" : "⭐"; row.appendChild(ico);
+    const meta=document.createElement("div"); meta.className="meta";
+    const t=document.createElement("div"); t.className="t"; t.textContent = s.kind==="extra" ? ("추가 미션"+(s.label?" · "+s.label:"")) : "기본 미션";
+    meta.appendChild(t);
+    if(s.awardedBy){ const sub=document.createElement("div"); sub.className="s"; sub.textContent=s.awardedBy+" 가 찍음"; meta.appendChild(sub); }
+    row.appendChild(meta);
+    if(state.parentOn){ const del=document.createElement("button"); del.className="del"; del.textContent="빼기"; del.onclick=()=>removeStamp(s.id); row.appendChild(del); }
+    b.appendChild(row);
+  });
+
+  if(state.parentOn){
+    const dw = dowOf(ds), wk = c.weekdayMissions && c.weekdayMissions[dw];
+    const hasBasic = list.some(s => s.kind === "basic");
+    const l1=document.createElement("div"); l1.className="awardlbl"; l1.textContent="도장 찍기"; b.appendChild(l1);
+    if(wk){ const hint=document.createElement("div"); hint.style.cssText="font-size:12px;color:var(--muted);font-weight:700;margin:-2px 0 7px;line-height:1.4;"; hint.textContent="숙제: "+wk; b.appendChild(hint); }
+    const big=document.createElement("button"); big.className="bigaward"; big.textContent=wk?"⭐ 숙제 완료 도장 +1":"⭐ 기본 미션 도장 +1"; big.onclick=()=>award(ds,"basic",null); b.appendChild(big);
+    const exs = (c.extraMissions||[]).filter(m=>m.label);
+    if(exs.length){
+      const el2=document.createElement("div"); el2.className="awardlbl"; el2.textContent="추가 미션 (쿠폰)"; b.appendChild(el2);
+      const status=document.createElement("div");
+      if(hasBasic){ status.style.cssText="font-size:12px;color:var(--good);font-weight:800;margin:-2px 0 6px;"; status.textContent="✅ 숙제 도장을 받아서 추가 도장을 줄 수 있어요"; }
+      else { status.style.cssText="font-size:12px;color:#c77b1a;font-weight:800;margin:-2px 0 6px;line-height:1.4;"; status.textContent="🔒 먼저 '숙제 완료 도장'을 받아야 추가 도장을 줄 수 있어요"; }
+      b.appendChild(status);
+      const grid=document.createElement("div"); grid.className="extragrid";
+      exs.forEach(m=>{ const eb=document.createElement("button"); eb.className="extrabtn"+(hasBasic?"":" locked"); eb.textContent="✦ "+m.label+"  +1"; eb.onclick=()=>award(ds,"extra",m.label); grid.appendChild(eb); });
+      b.appendChild(grid);
+    }
+  } else {
+    const k=document.createElement("div"); k.className="kidnote"; k.textContent="도장은 엄마·아빠가 찍어요 💛"; b.appendChild(k);
+  }
+}
+async function award(ds, kind, label){
+  if(!state.parentOn) return;
+  // 규칙: 그날 기본 미션(숙제 완료) 도장이 있어야 추가 도장을 줄 수 있음
+  if(kind === "extra" && !stampsOn(ds).some(s => s.kind === "basic")){
+    toast("먼저 '숙제 완료 도장'을 찍어주세요 — 기본 미션을 해야 추가 도장을 받아요");
+    return;
+  }
+  try{
+    setSync("syncing");
+    const { id } = await backend.addStamp(state.code, ds, kind, label||null, state.who||null);
+    state.stamps.push({ id, day:ds, kind, label:label||null, awardedBy:state.who||null });
+    if(state.board) state.board.totalStamps++;
+    burstStars(10); renderAll(); renderSheet(); cacheSave(); setSync(backendMode());
+    maybeCelebrate(ds);
+    refetchSoft();
+  }catch(e){ setSync(navigator.onLine?backendMode():"offline"); toast(syncErr(e)); }
+}
+async function removeStamp(id){
+  try{
+    setSync("syncing");
+    await backend.removeStamp(state.code, id);
+    state.stamps = state.stamps.filter(s => s.id !== id);
+    if(state.board && state.board.totalStamps>0) state.board.totalStamps--;
+    renderAll(); renderSheet(); cacheSave(); setSync(backendMode());
+    refetchSoft();
+  }catch(e){ setSync(navigator.onLine?backendMode():"offline"); toast(syncErr(e)); }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ⑧ 축하 (목표 달성 1회)
+   ════════════════════════════════════════════════════════════════ */
+function maybeCelebrate(ds){
+  const c = cfg(), scope = c.targetScope||"cycle", target = Math.max(1, c.target||1), done = c.celebrated||[];
+  let key = null, reached = false;
+  if(scope==="month"){
+    const mk = ds.slice(0,7), cnt = state.stamps.filter(s => s.day.slice(0,7)===mk).length;
+    if(cnt >= target){ key = "m"+mk+"@"+target; reached = true; }
+  } else {
+    const total = state.board ? state.board.totalStamps : 0;
+    if(scope==="cycle"){ const round = Math.floor(total/target); if(round >= 1){ key = "cycle@"+target+"@"+round; reached = true; } }
+    else { if(total >= target){ key = "total@"+target; reached = true; } }
+  }
+  if(reached && key && !done.includes(key)){
+    const nc = Object.assign({}, c); nc.celebrated = done.concat(key);
+    if(state.board) state.board.config = nc;
+    backend.saveConfig(state.code, state.board?state.board.childName:null, nc).then(cacheSave).catch(()=>{});
+    showWin(target, c.reward);
+  }
+}
+function showWin(n, reward){
+  $("#winScore").textContent = "🎁";
+  $("#winNote").innerHTML = `도장을 <b>${n}개</b> 다 모았어요!<br>${esc(reward||"선물")} 받을 시간이에요 🎊`;
+  show("win"); rainStars(28);
+}
+function rainStars(count){
+  const e=["⭐","🌟","✨","🎉","💫","🎊"];
+  for(let i=0;i<(count||24);i++){ const s=document.createElement("div"); s.className="star-rain"; s.textContent=e[i%e.length];
+    s.style.left=Math.random()*100+"vw"; s.style.animationDuration=(1.6+Math.random()*1.6)+"s"; s.style.animationDelay=(Math.random()*0.4)+"s";
+    document.body.appendChild(s); setTimeout(()=>s.remove(),3600); }
+}
+function burstStars(count){ rainStars(count||10); }
+
+/* ════════════════════════════════════════════════════════════════
+   ⑨ 첫 실행 셋업 (가족 코드)
+   ════════════════════════════════════════════════════════════════ */
+function openSetup(){ setupHome(); show("setup"); }
+function setupHome(){
+  const b = $("#setupBody"); b.innerHTML="";
+  const note=document.createElement("div"); note.className="note";
+  note.innerHTML = SUPA_CONFIGURED
+    ? "엄마·아빠·아이 기기에서 <b>같은 가족 코드</b>를 쓰면 도장판이 실시간으로 같이 보여요."
+    : "지금은 <b>이 기기에만</b> 저장돼요. 여러 기기 연동은 <b>docs/가입_배포_가이드.md</b>를 보고 Supabase를 설정하세요.";
+  b.appendChild(note);
+  const g=document.createElement("div"); g.className="btns";
+  const a=document.createElement("button"); a.className="btn go"; a.textContent="🌟 새로 시작하기"; a.onclick=setupCreate; g.appendChild(a);
+  const c=document.createElement("button"); c.className="btn primary"; c.textContent="🔑 이미 코드가 있어요"; c.onclick=setupJoin; g.appendChild(c);
+  b.appendChild(g);
+}
+function setupCreate(){
+  const b=$("#setupBody"); b.innerHTML="";
+  b.innerHTML = `<div class="note">아이 이름을 정해요.</div>`;
+  const inp=document.createElement("input"); inp.className="finput"; inp.value="비니"; inp.maxLength=12; b.appendChild(inp);
+  const err=document.createElement("div"); err.className="err"; b.appendChild(err);
+  const g=document.createElement("div"); g.className="btns";
+  const mk=document.createElement("button"); mk.className="btn go"; mk.textContent="만들기"; g.appendChild(mk);
+  const bk=document.createElement("button"); bk.className="btn ghost"; bk.textContent="뒤로"; bk.onclick=setupHome; g.appendChild(bk);
+  b.appendChild(g);
+  mk.onclick = async () => {
+    mk.disabled=true; err.textContent="";
+    try{ const { code } = await backend.createBoard(inp.value, defaultConfig()); setupShowCode(code); }
+    catch(e){ mk.disabled=false; err.textContent = syncErr(e); }
+  };
+  setTimeout(()=>inp.focus(),60);
+}
+function setupShowCode(code){
+  const b=$("#setupBody"); b.innerHTML="";
+  b.innerHTML = `<div class="note">가족 코드가 만들어졌어요!<br>엄마·아빠 기기에 이 코드를 입력하세요.</div>`;
+  const cb=document.createElement("div"); cb.className="codebig"; cb.textContent=code; b.appendChild(cb);
+  const g=document.createElement("div"); g.className="btns";
+  const cp=document.createElement("button"); cp.className="btn primary"; cp.textContent="📋 코드 복사"; cp.onclick=()=>copyText(code); g.appendChild(cp);
+  const go=document.createElement("button"); go.className="btn go"; go.textContent="시작하기 →"; go.onclick=()=>{ joinCode(code); }; g.appendChild(go);
+  b.appendChild(g);
+}
+function setupJoin(){
+  const b=$("#setupBody"); b.innerHTML="";
+  b.innerHTML = `<div class="note">받은 가족 코드를 입력하세요.</div>`;
+  const inp=document.createElement("input"); inp.className="finput"; inp.placeholder="가족 코드"; inp.autocapitalize="off"; inp.autocomplete="off"; b.appendChild(inp);
+  const err=document.createElement("div"); err.className="err"; b.appendChild(err);
+  const g=document.createElement("div"); g.className="btns";
+  const ok=document.createElement("button"); ok.className="btn go"; ok.textContent="확인"; g.appendChild(ok);
+  const bk=document.createElement("button"); bk.className="btn ghost"; bk.textContent="뒤로"; bk.onclick=setupHome; g.appendChild(bk);
+  b.appendChild(g);
+  ok.onclick = async () => {
+    const code = lc(inp.value); if(!code){ err.textContent="코드를 입력하세요."; return; }
+    ok.disabled=true; err.textContent="";
+    try{ const board = await backend.getBoard(code); if(!board){ ok.disabled=false; err.textContent="그런 코드가 없어요. 다시 확인해요."; return; } joinCode(code); }
+    catch(e){ ok.disabled=false; err.textContent = syncErr(e); }
+  };
+  setTimeout(()=>inp.focus(),60);
+}
+function joinCode(code){ state.code=lc(code); Store.set(KEY_CODE, state.code); hide("setup"); loadBoard(); }
+
+function copyText(t){
+  const done=()=>toast("복사했어요 ✅");
+  try{ navigator.clipboard.writeText(t).then(done, ()=>fallbackCopy(t,done)); }
+  catch(e){ fallbackCopy(t,done); }
+}
+function fallbackCopy(t,done){ try{ const ta=document.createElement("textarea"); ta.value=t; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); done(); }catch(e){ toast(t); } }
+
+/* ════════════════════════════════════════════════════════════════
+   ⑩ 부모 모드 — 비번 게이트 + 설정
+   ════════════════════════════════════════════════════════════════ */
+let _armReset=false, _armWipeMonth=false, _armWipeAll=false, _wdOpen=false, _editCfg=null, _editName="";
+function openParent(){
+  const c=cfg();
+  if(state.parentOn){ parentQuickMenu(); }
+  else if(!c.parentPw){ parentCreatePw(); }
+  else { parentInputPw(); }
+  show("parent");
+}
+// 부모 모드일 때 길게 누르기/배지 → 작은 메뉴(설정/끄기). 설정창을 강제로 열지 않음.
+function parentQuickMenu(){
+  pcardReset();
+  $("#parentTitle").textContent="부모 모드 🔓";
+  const b=$("#parentBody"); b.innerHTML=`<div class="note">날짜를 눌러 ⭐ 도장을 찍을 수 있어요.</div>`;
+  const g=document.createElement("div"); g.className="btns";
+  g.appendChild(mkBtn("⚙️ 설정 (미션·목표·선물)","primary", parentMenu));
+  g.appendChild(mkBtn("🔒 부모 모드 끄기","ghost",()=>{ state.parentOn=false; hide("parent"); renderAll(); toast("부모 모드 꺼짐"); }));
+  g.appendChild(mkBtn("닫기","ghost",()=>hide("parent")));
+  b.appendChild(g);
+}
+function pcardReset(){ _armReset=_armWipeMonth=_armWipeAll=false; }
+function parentCreatePw(){
+  pcardReset(); $("#parentTitle").textContent="부모 비밀번호 만들기";
+  const b=$("#parentBody"); b.innerHTML=`<div class="note">부모만 도장을 찍을 수 있게 비밀번호를 정해요.<br>모든 기기에서 같이 쓰여요. (4자리 이상)</div>`;
+  const p1=mkInput("새 비밀번호","password"), p2=mkInput("비밀번호 확인","password");
+  const err=document.createElement("div"); err.className="err";
+  b.appendChild(p1); b.appendChild(p2); b.appendChild(err);
+  const g=document.createElement("div"); g.className="btns";
+  g.appendChild(mkBtn("만들기","go", async ()=>{
+    const a=p1.value.trim(), c2=p2.value.trim();
+    if(a.length<4){ err.textContent="4자리 이상으로 정해요."; return; }
+    if(a!==c2){ err.textContent="두 비밀번호가 달라요."; return; }
+    const nc=Object.assign({}, cfg()); nc.parentPw=encPw(a);
+    try{ await backend.saveConfig(state.code, state.board?state.board.childName:null, nc); if(state.board) state.board.config=nc; cacheSave(); state.parentOn=true; hide("parent"); renderAll(); toast("부모 모드 🔓 — 날짜를 눌러 도장을 찍으세요"); }
+    catch(e){ err.textContent=syncErr(e); }
+  }));
+  g.appendChild(mkBtn("취소","ghost",()=>hide("parent")));
+  b.appendChild(g); setTimeout(()=>p1.focus(),60);
+}
+function parentInputPw(){
+  pcardReset(); $("#parentTitle").textContent="부모 비밀번호";
+  const b=$("#parentBody"); b.innerHTML=`<div class="note">비밀번호를 입력하면 도장을 찍을 수 있어요.</div>`;
+  const p1=mkInput("비밀번호","password");
+  const err=document.createElement("div"); err.className="err";
+  b.appendChild(p1); b.appendChild(err);
+  const g=document.createElement("div"); g.className="btns";
+  g.appendChild(mkBtn("확인","go",()=>{ if(cfg().parentPw===encPw(p1.value.trim())){ state.parentOn=true; hide("parent"); renderAll(); toast("부모 모드 🔓 — 날짜를 눌러 도장을 찍으세요"); } else err.textContent="비밀번호가 틀렸어요."; }));
+  const reset=mkBtn("비밀번호 초기화","ghost", async ()=>{
+    if(!_armReset){ _armReset=true; err.textContent="한 번 더 누르면 비밀번호를 지워요(도장은 유지)."; return; }
+    const nc=Object.assign({}, cfg()); nc.parentPw="";
+    try{ await backend.saveConfig(state.code, state.board?state.board.childName:null, nc); if(state.board) state.board.config=nc; cacheSave(); parentCreatePw(); }catch(e){ err.textContent=syncErr(e); }
+  });
+  g.appendChild(reset);
+  g.appendChild(mkBtn("취소","ghost",()=>hide("parent")));
+  b.appendChild(g); setTimeout(()=>p1.focus(),60);
+}
+function parentMenu(){
+  pcardReset(); _wdOpen=false;
+  _editCfg = JSON.parse(JSON.stringify(cfg()));
+  _editName = state.board ? state.board.childName : "비니";
+  $("#parentTitle").textContent="부모 설정 🔓";
+  buildParentForm();
+}
+function buildParentForm(){
+  const c=_editCfg, b=$("#parentBody"); b.innerHTML="";
+
+  b.appendChild(frow("아이 이름", inputLeft(_editName, v=>_editName=v)));
+  b.appendChild(frow("목표 도장 수", stepper(c.target||1,
+    ()=>{ c.target=Math.max(1,(c.target||1)-1); buildParentForm(); },
+    ()=>{ c.target=Math.min(999,(c.target||1)+1); buildParentForm(); })));
+  b.appendChild(frow("목표 방식", seg([["cycle","반복"],["total","누적(1회)"],["month","매달"]], c.targetScope||"cycle", v=>{ c.targetScope=v; buildParentForm(); })));
+  const scopeHelp=document.createElement("div"); scopeHelp.style.cssText="font-size:11px;color:var(--muted);margin:-5px 0 6px;line-height:1.4;"; scopeHelp.textContent="반복: 목표만큼 모을 때마다 선물(아이가 그때그때 선택) · 누적: 한 번만 · 매달: 달마다 새로"; b.appendChild(scopeHelp);
+  b.appendChild(frow("선물 🎁", inputLeft(c.reward||"", v=>c.reward=v)));
+  b.appendChild(frow("기본 미션", inputLeft(c.basicMission||"", v=>c.basicMission=v)));
+
+  // 추가 미션 목록
+  const exWrap=document.createElement("div");
+  (c.extraMissions||[]).forEach((m,i)=>{
+    const row=document.createElement("div"); row.className="mrow";
+    row.appendChild(inputLeft(m.label||"", v=>m.label=v, "추가 미션"));
+    const del=document.createElement("button"); del.className="iconbtn"; del.textContent="✕"; del.onclick=()=>{ c.extraMissions.splice(i,1); buildParentForm(); };
+    row.appendChild(del); exWrap.appendChild(row);
+  });
+  const add=document.createElement("button"); add.className="addbtn"; add.textContent="＋ 추가 미션 넣기"; add.onclick=()=>{ (c.extraMissions=c.extraMissions||[]).push({id:uid(),label:""}); buildParentForm(); };
+  exWrap.appendChild(add);
+  b.appendChild(frow("추가 미션 (각 +1 도장)", exWrap));
+
+  // 요일별 미션 (선택, 접기)
+  const wdToggle=document.createElement("button"); wdToggle.className="linkbtn"; wdToggle.textContent=(_wdOpen?"▾":"▸")+" 요일별 미션 설정 (선택)";
+  wdToggle.onclick=()=>{ _wdOpen=!_wdOpen; buildParentForm(); };
+  b.appendChild(wdToggle);
+  if(_wdOpen){
+    const wd=document.createElement("div"); c.weekdayMissions=c.weekdayMissions||{};
+    WK.forEach((w,i)=>{ wd.appendChild(frow(w+"요일", inputLeft(c.weekdayMissions[i]||"", v=>{ if(v.trim()) c.weekdayMissions[i]=v; else delete c.weekdayMissions[i]; }, "비우면 기본 미션 사용"))); });
+    b.appendChild(wd);
+  }
+
+  // 이 기기 역할
+  b.appendChild(frow("이 기기로 찍으면 표시될 이름", seg([["","없음"],["엄마","엄마"],["아빠","아빠"]], state.who||"", v=>{ state.who=v; Store.set(KEY_WHO,v); buildParentForm(); })));
+
+  // 가족 코드
+  const cbox=document.createElement("div"); cbox.className="codebox";
+  const cv=document.createElement("div"); cv.className="cv"; cv.textContent=state.code||"(이 기기)"; cbox.appendChild(cv);
+  const cpy=document.createElement("button"); cpy.className="iconbtn"; cpy.style.color="var(--ink)"; cpy.textContent="복사"; cpy.onclick=()=>copyText(state.code); cbox.appendChild(cpy);
+  b.appendChild(frow("가족 코드 (다른 기기에 입력)", cbox));
+
+  // 저장
+  const g=document.createElement("div"); g.className="btns";
+  g.appendChild(mkBtn("💾 저장","go", saveParent));
+  b.appendChild(g);
+
+  const dv=document.createElement("div"); dv.className="divider"; b.appendChild(dv);
+
+  // 위험/기타
+  const err=document.createElement("div"); err.className="err"; err.id="pErr"; b.appendChild(err);
+  const g2=document.createElement("div"); g2.className="btns";
+  g2.appendChild(mkBtn("이 달 도장 초기화","warn", async ()=>{
+    if(!_armWipeMonth){ _armWipeMonth=true; $("#pErr").textContent=`정말 ${state.view.m+1}월 도장을 모두 지울까요? 한 번 더 누르면 삭제돼요.`; return; }
+    const r=monthRange(state.view.y,state.view.m);
+    try{ await backend.clearStamps(state.code,r.from,r.to); await refetchSoft(); _armWipeMonth=false; $("#pErr").textContent=""; toast("이 달 도장을 지웠어요"); }catch(e){ $("#pErr").textContent=syncErr(e); }
+  }));
+  g2.appendChild(mkBtn("전체 도장 초기화","warn", async ()=>{
+    if(!_armWipeAll){ _armWipeAll=true; $("#pErr").textContent="정말 전체 도장을 모두 지울까요? 한 번 더 누르면 삭제돼요(되돌릴 수 없음)."; return; }
+    try{ await backend.clearStamps(state.code,"1900-01-01","2999-12-31");
+      const nc=Object.assign({}, cfg()); nc.celebrated=[]; await backend.saveConfig(state.code, state.board?state.board.childName:null, nc); if(state.board) state.board.config=nc;
+      await refetchSoft(); _armWipeAll=false; $("#pErr").textContent=""; toast("전체 도장을 지웠어요"); }catch(e){ $("#pErr").textContent=syncErr(e); }
+  }));
+  g2.appendChild(mkBtn("비밀번호 변경","ghost",parentCreatePw));
+  g2.appendChild(mkBtn("부모 모드 끄기","ghost",()=>{ state.parentOn=false; hide("parent"); renderAll(); toast("부모 모드 꺼짐"); }));
+  g2.appendChild(mkBtn("닫기","ghost",()=>{ hide("parent"); }));
+  b.appendChild(g2);
+}
+async function saveParent(){
+  try{
+    setSync("syncing");
+    await backend.saveConfig(state.code, _editName, _editCfg);
+    if(state.board){ state.board.childName = (_editName||"").trim()||state.board.childName; state.board.config = _editCfg; }
+    cacheSave(); setSync(backendMode()); renderAll(); toast("저장했어요 ✅");
+    refetchSoft();
+  }catch(e){ setSync(navigator.onLine?backendMode():"offline"); toast(syncErr(e)); }
+}
+/* 폼 요소 빌더 */
+function frow(label, node){ const d=document.createElement("div"); d.className="frow"; const l=document.createElement("div"); l.className="flabel"; l.textContent=label; d.appendChild(l); d.appendChild(node); return d; }
+function inputLeft(val, onInput, ph){ const i=document.createElement("input"); i.className="finput left"; i.value=val||""; if(ph)i.placeholder=ph; i.oninput=()=>onInput(i.value); return i; }
+function mkInput(ph,type){ const i=document.createElement("input"); i.className="finput"; i.type=type||"text"; i.placeholder=ph; if(type==="password")i.inputMode="numeric"; return i; }
+function stepper(val, onMinus, onPlus){ const d=document.createElement("div"); d.className="stepper"; const a=document.createElement("button"); a.textContent="−"; a.onclick=onMinus; const b=document.createElement("b"); b.textContent=val; const c=document.createElement("button"); c.textContent="＋"; c.onclick=onPlus; d.appendChild(a); d.appendChild(b); d.appendChild(c); return d; }
+function seg(opts, cur, on){ const d=document.createElement("div"); d.className="seg"; opts.forEach(([v,l])=>{ const p=document.createElement("button"); p.className="pill"+(cur===v?" on":""); p.textContent=l; p.onclick=()=>on(v); d.appendChild(p); }); return d; }
+function mkBtn(label, kind, fn){ const b=document.createElement("button"); b.className="btn "+kind; b.textContent=label; b.onclick=fn; return b; }
+
+/* 제목 길게 누르기 → 부모 모드 */
+let _lpT=null;
+function bindLongPress(el, fn, ms){
+  const start=()=>{ clearTimeout(_lpT); _lpT=setTimeout(fn, ms||700); };
+  const cancel=()=>clearTimeout(_lpT);
+  el.addEventListener("touchstart",start,{passive:true}); el.addEventListener("touchend",cancel);
+  el.addEventListener("touchmove",cancel); el.addEventListener("touchcancel",cancel);
+  el.addEventListener("mousedown",start); el.addEventListener("mouseup",cancel); el.addEventListener("mouseleave",cancel);
+  el.addEventListener("contextmenu",e=>e.preventDefault());
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ⑪ 월 이동 / 모달 닫기 / 동기화 트리거 / 시작
+   ════════════════════════════════════════════════════════════════ */
+async function changeMonth(delta){
+  let { y, m } = state.view; m+=delta; if(m<0){ m=11; y--; } if(m>11){ m=0; y++; }
+  state.view={ y, m };
+  $("#calTitle").textContent=`${y}년 ${m+1}월`;
+  try{ await loadMonth(); cacheSave(); }catch(e){}
+  renderAll();
+}
+function goToday(){ const d=new Date(); state.view={ y:d.getFullYear(), m:d.getMonth() }; changeMonth(0); }
+
+$("#calPrev").onclick=()=>changeMonth(-1);
+$("#calNext").onclick=()=>changeMonth(1);
+$("#calTitle").onclick=goToday;
+$("#sheetClose").onclick=()=>hide("daysheet");
+$("#winClose").onclick=()=>hide("win");
+$("#synchip").onclick=()=>{ if(state.sync==="local") toast("이 기기에만 저장돼요. 연동은 docs/가입_배포_가이드.md 참고"); else { setSync("syncing"); refetchSoft(); } };
+// 배경 탭으로 모달 닫기 (설정/시트/축하만)
+["setup","daysheet","parent","win"].forEach(id=>{ $("#"+id).addEventListener("click",e=>{ if(e.target.id===id){ if(id!=="setup"||state.code) hide(id); } }); });
+bindLongPress($("#title"), openParent, 700);
+
+// 포커스/가시성/온라인 → 부드러운 새로고침
+window.addEventListener("focus", refetchSoft);
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) refetchSoft(); });
+window.addEventListener("online", ()=>{ setSync("syncing"); refetchSoft(); });
+window.addEventListener("offline", ()=>setSync("offline"));
+setInterval(()=>{ if(!document.hidden) refetchSoft(); }, 18000);   // 18초 폴링(포그라운드만)
+
+// 시작
+setSync(state.sync);
+renderAll();
+if(state.code) loadBoard(); else openSetup();
+</script>
+
+<script>
+/* PWA 서비스워커 등록 (오프라인 실행용) */
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function(){ navigator.serviceWorker.register("sw.js").catch(function(){}); });
+}
+</script>
