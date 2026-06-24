@@ -1,0 +1,26 @@
+# Supabase 휴면 방지 — 무료 프로젝트는 약 7일 미사용 시 일시정지된다.
+# 매일 ping() RPC를 호출해 '활동'을 만들어 정지를 막는다. 가족이 매일 써도, 안 쓰는 기간 대비 보험.
+# URL/anon 키는 공개 안전: anon 키는 RLS로 보호되고 이미 공개 index.html에도 들어 있음(추가 노출 0).
+name: keepalive
+
+on:
+  schedule:
+    - cron: "23 21 * * *"   # 매일 21:23 UTC (= 06:23 KST). GitHub 권장대로 정시(:00)는 피함
+  workflow_dispatch: {}      # 수동 실행 버튼(테스트용)
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase ping() RPC
+        run: |
+          set -e
+          URL="https://kalohmhfnhhwsltlshpt.supabase.co/rest/v1/rpc/ping"
+          ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImthbG9obWhmbmhod3NsdGxzaHB0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyNzI5MTIsImV4cCI6MjA5Nzg0ODkxMn0.8eVOJI-zODqPwZnhC-vaiyHHd98hT8GZXR8Cd6uYBeg"
+          resp=$(curl -s -w "\n%{http_code}" -X POST "$URL" \
+            -H "apikey: $ANON" -H "Authorization: Bearer $ANON" \
+            -H "Content-Type: application/json" -d '{}')
+          echo "$resp"
+          code=$(printf '%s' "$resp" | tail -n1)
+          echo "HTTP $code"
+          test "$code" = "200"
