@@ -473,7 +473,7 @@ function renderStrip(){
 function renderToday(){
   const c = cfg(), t = today(), dow = new Date().getDay();
   const wk = c.weekdayMissions && c.weekdayMissions[dow];
-  const basic = wk ? ("오늘 숙제: " + wk) : (c.basicMission||"오늘의 기본 미션");
+  const basic = wk ? ("오늘 숙제: " + wk) : "오늘은 추가 미션만 받아요";
   const n = stampsOn(t).length;
   $("#todayBasic").textContent = (n>0 ? "✅ " : "⭐ ") + basic + (n>0 ? `  (도장 ${n}개)` : (wk ? "  · 다 하면 도장 1개" : ""));
   const box = $("#todayExtras"); box.innerHTML="";
@@ -526,20 +526,27 @@ function renderSheet(){
   });
 
   if(state.parentOn){
-    const dw = dowOf(ds), wk = c.weekdayMissions && c.weekdayMissions[dw];
+    const wk = c.weekdayMissions && c.weekdayMissions[dowOf(ds)];   // 그날 숙제. 없으면 주말 등 '추가 미션만' 날
     const hasBasic = list.some(s => s.kind === "basic");
-    const l1=document.createElement("div"); l1.className="awardlbl"; l1.textContent="도장 찍기"; b.appendChild(l1);
-    if(wk){ const hint=document.createElement("div"); hint.style.cssText="font-size:12px;color:var(--muted);font-weight:700;margin:-2px 0 7px;line-height:1.4;"; hint.textContent="숙제: "+wk; b.appendChild(hint); }
-    const big=document.createElement("button"); big.className="bigaward"; big.textContent=wk?"⭐ 숙제 완료 도장 +1":"⭐ 기본 미션 도장 +1"; big.onclick=()=>award(ds,"basic",null); b.appendChild(big);
     const exs = (c.extraMissions||[]).filter(m=>m.label);
+    const extraOK = !wk || hasBasic;                               // 숙제 없는 날은 잠금 없음
+    const l1=document.createElement("div"); l1.className="awardlbl"; l1.textContent="도장 찍기"; b.appendChild(l1);
+    if(wk){   // 숙제 있는 날(평일): 기본 도장 버튼 + 게이팅 유지
+      const hint=document.createElement("div"); hint.style.cssText="font-size:12px;color:var(--muted);font-weight:700;margin:-2px 0 7px;line-height:1.4;"; hint.textContent="숙제: "+wk; b.appendChild(hint);
+      const big=document.createElement("button"); big.className="bigaward"; big.textContent="⭐ 숙제 완료 도장 +1"; big.onclick=()=>award(ds,"basic",null); b.appendChild(big);
+    } else {  // 숙제 없는 날(주말 등): 기본 버튼 숨김 + 안내
+      const note=document.createElement("div"); note.style.cssText="font-size:12px;color:var(--muted);font-weight:700;margin:-2px 0 9px;line-height:1.4;"; note.textContent="오늘은 추가 미션만 받아요"; b.appendChild(note);
+    }
     if(exs.length){
       const el2=document.createElement("div"); el2.className="awardlbl"; el2.textContent="추가 미션 (쿠폰)"; b.appendChild(el2);
-      const status=document.createElement("div");
-      if(hasBasic){ status.style.cssText="font-size:12px;color:var(--good);font-weight:800;margin:-2px 0 6px;"; status.textContent="✅ 숙제 도장을 받아서 추가 도장을 줄 수 있어요"; }
-      else { status.style.cssText="font-size:12px;color:#c77b1a;font-weight:800;margin:-2px 0 6px;line-height:1.4;"; status.textContent="🔒 먼저 '숙제 완료 도장'을 받아야 추가 도장을 줄 수 있어요"; }
-      b.appendChild(status);
+      if(wk){   // 게이팅 상태 문구는 숙제 있는 날만
+        const status=document.createElement("div");
+        if(hasBasic){ status.style.cssText="font-size:12px;color:var(--good);font-weight:800;margin:-2px 0 6px;"; status.textContent="✅ 숙제 도장을 받아서 추가 도장을 줄 수 있어요"; }
+        else { status.style.cssText="font-size:12px;color:#c77b1a;font-weight:800;margin:-2px 0 6px;line-height:1.4;"; status.textContent="🔒 먼저 '숙제 완료 도장'을 받아야 추가 도장을 줄 수 있어요"; }
+        b.appendChild(status);
+      }
       const grid=document.createElement("div"); grid.className="extragrid";
-      exs.forEach(m=>{ const eb=document.createElement("button"); eb.className="extrabtn"+(hasBasic?"":" locked"); eb.textContent="✦ "+m.label+"  +1"; eb.onclick=()=>award(ds,"extra",m.label); grid.appendChild(eb); });
+      exs.forEach(m=>{ const eb=document.createElement("button"); eb.className="extrabtn"+(extraOK?"":" locked"); eb.textContent="✦ "+m.label+"  +1"; eb.onclick=()=>award(ds,"extra",m.label); grid.appendChild(eb); });
       b.appendChild(grid);
     }
   } else {
@@ -548,8 +555,9 @@ function renderSheet(){
 }
 async function award(ds, kind, label){
   if(!state.parentOn) return;
-  // 규칙: 그날 기본 미션(숙제 완료) 도장이 있어야 추가 도장을 줄 수 있음
-  if(kind === "extra" && !stampsOn(ds).some(s => s.kind === "basic")){
+  const c = cfg(), wk = c.weekdayMissions && c.weekdayMissions[dowOf(ds)];   // 그날 숙제(없으면 주말 등 '추가 미션만' 날)
+  // 규칙: 숙제 있는 날만 — 추가 도장은 그날 기본(숙제) 도장이 있어야 함. 숙제 없는 날(주말 등)은 바로 허용.
+  if(kind === "extra" && wk && !stampsOn(ds).some(s => s.kind === "basic")){
     toast("먼저 '숙제 완료 도장'을 찍어주세요 — 기본 미션을 해야 추가 도장을 받아요");
     return;
   }

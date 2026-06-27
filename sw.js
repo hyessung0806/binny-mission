@@ -1,7 +1,7 @@
 /* 비니의 미션달력 — 서비스워커 (오프라인 캐시)
    ⚠️ 앱/코드를 바꾸면 아래 CACHE 버전을 올리세요: binnymission-v1 → v2 → …
       (안 올리면 기기에 예전 버전이 남아 그대로 보임) */
-const CACHE = "binnymission-v4";
+const CACHE = "binnymission-v5";
 const ASSETS = [
   "./", "./index.html", "./manifest.json",
   "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png"
