@@ -1,26 +1,83 @@
-# Supabase 휴면 방지 — 무료 프로젝트는 약 7일 미사용 시 일시정지된다.
-# 매일 ping() RPC를 호출해 '활동'을 만들어 정지를 막는다. 가족이 매일 써도, 안 쓰는 기간 대비 보험.
+# 휴면 방지 — 두 가지를 동시에 막는다.
+#  ① Supabase 무료 플랜: 7일간 DB 활동이 부족하면 프로젝트가 자동 일시정지된다.
+#     → keepalive_ping()(쓰기) + ping()(읽기)을 하루 3번 호출해 확실한 "DB 활동"을 남긴다.
+#       (예전 버전은 하루 1번 + 상수 반환이라 테이블을 안 건드려서, 핑이 도는데도 정지 예고 메일이 왔다.)
+#  ② GitHub: public 저장소는 60일간 저장소 활동이 없으면 예약(cron) 워크플로를 자동으로 끈다.
+#     → 마지막 커밋이 50일을 넘기면 더미 커밋을 만들어 타이머를 리셋한다. (안 하면 핑 자체가 죽는다)
+#
 # URL/anon 키는 공개 안전: anon 키는 RLS로 보호되고 이미 공개 index.html에도 들어 있음(추가 노출 0).
 name: keepalive
 
 on:
   schedule:
-    - cron: "23 21 * * *"   # 매일 21:23 UTC (= 06:23 KST). GitHub 권장대로 정시(:00)는 피함
-  workflow_dispatch: {}      # 수동 실행 버튼(테스트용)
+    - cron: "23 21 * * *"   # 06:23 KST
+    - cron: "17  5 * * *"   # 14:17 KST
+    - cron: "41 13 * * *"   # 22:41 KST   (GitHub 권장대로 정시(:00)는 피함)
+  workflow_dispatch:
+    inputs:
+      force_repo_commit:
+        description: "저장소 더미 커밋을 지금 강제 실행 (푸시 권한 확인용)"
+        type: boolean
+        default: false
 
 jobs:
+  # ────────────────────────────────────────────────
+  # ① Supabase 휴면 방지 — 실제 DB 활동 만들기
+  # ────────────────────────────────────────────────
   ping:
     runs-on: ubuntu-latest
+    permissions: {}          # 이 잡은 저장소 권한이 전혀 필요 없음
     steps:
-      - name: Ping Supabase ping() RPC
+      - name: Supabase keepalive RPC 호출 (쓰기 + 읽기)
+        env:
+          BASE: https://kalohmhfnhhwsltlshpt.supabase.co/rest/v1/rpc
+          ANON: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImthbG9obWhmbmhod3NsdGxzaHB0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyNzI5MTIsImV4cCI6MjA5Nzg0ODkxMn0.8eVOJI-zODqPwZnhC-vaiyHHd98hT8GZXR8Cd6uYBeg
+        run: |
+          set -uo pipefail
+          call() {
+            curl -s -o /tmp/body -w "%{http_code}" -X POST "$BASE/$1" \
+              -H "apikey: $ANON" -H "Authorization: Bearer $ANON" \
+              -H "Content-Type: application/json" -d '{}'
+          }
+          w=$(call keepalive_ping); echo "keepalive_ping (쓰기) → HTTP $w  $(cat /tmp/body)"
+          r=$(call ping);           echo "ping           (읽기) → HTTP $r  $(cat /tmp/body)"
+
+          if [ "$w" != "200" ]; then
+            echo "::warning::keepalive_ping 이 200이 아닙니다 — supabase/schema.sql 을 SQL Editor 에 아직 실행하지 않았을 수 있습니다."
+          fi
+          # 둘 중 하나라도 200이면 프로젝트는 살아있는 것 → 실패 알림 남발 방지
+          [ "$w" = "200" ] || [ "$r" = "200" ]
+
+  # ────────────────────────────────────────────────
+  # ② GitHub 60일 자동 비활성화 방지 — 필요할 때만 더미 커밋
+  # ────────────────────────────────────────────────
+  keep-repo-active:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # 더미 커밋 push 용 (저장소 기본값이 read 라 여기서 올려줌)
+    steps:
+      - uses: actions/checkout@v4
+      - name: 마지막 커밋이 50일을 넘겼으면 더미 커밋
+        env:
+          FORCE: ${{ inputs.force_repo_commit }}
         run: |
           set -e
-          URL="https://kalohmhfnhhwsltlshpt.supabase.co/rest/v1/rpc/ping"
-          ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImthbG9obWhmbmhod3NsdGxzaHB0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyNzI5MTIsImV4cCI6MjA5Nzg0ODkxMn0.8eVOJI-zODqPwZnhC-vaiyHHd98hT8GZXR8Cd6uYBeg"
-          resp=$(curl -s -w "\n%{http_code}" -X POST "$URL" \
-            -H "apikey: $ANON" -H "Authorization: Bearer $ANON" \
-            -H "Content-Type: application/json" -d '{}')
-          echo "$resp"
-          code=$(printf '%s' "$resp" | tail -n1)
-          echo "HTTP $code"
-          test "$code" = "200"
+          days=$(( ( $(date -u +%s) - $(git log -1 --format=%ct) ) / 86400 ))
+          echo "마지막 커밋 후 ${days}일 경과 (60일이 되면 GitHub 가 예약 실행을 끈다)"
+
+          if [ "$FORCE" != "true" ] && [ "$days" -lt 50 ]; then
+            echo "아직 여유 있음 — 커밋 생략"
+            exit 0
+          fi
+
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > .github/keepalive-stamp
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/keepalive-stamp
+          if git diff --cached --quiet; then
+            echo "변경 없음 — 커밋 생략"
+            exit 0
+          fi
+          git commit -m "chore: keepalive — 예약 워크플로 60일 자동 비활성화 방지"
+          git push
+          echo "✅ 더미 커밋 push 완료 — 60일 타이머 리셋됨"
